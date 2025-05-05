@@ -1,5 +1,9 @@
 streamlit-webrtc
 av
 opencv-python
+gTTS==2.5.1
+matplotlib==3.8.4
+pandas==2.2.2
+
 
 
