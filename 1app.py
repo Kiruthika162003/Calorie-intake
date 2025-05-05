@@ -27,13 +27,10 @@ if "last_meal_result" not in st.session_state:
 if "last_image" not in st.session_state:
     st.session_state.last_image = None
 
-# Page setup
 st.set_page_config(page_title="Calorie Intake Finder", layout="wide")
-
 st.markdown("<h1 style='text-align: center;'>Calorie Intake Finder</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Upload or capture a food image. We’ll estimate macros, flag imbalances, and suggest better eating habits.</p>", unsafe_allow_html=True)
 
-# Image conversion
 def image_to_base64(img: Image.Image):
     if img is None:
         return None
@@ -41,7 +38,6 @@ def image_to_base64(img: Image.Image):
     img.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode()
 
-# Calorie + macro estimation
 def query_gemini(image: Image.Image, prompt_text: str):
     base64_img = image_to_base64(image)
     if base64_img is None:
@@ -57,13 +53,14 @@ def query_gemini(image: Image.Image, prompt_text: str):
     response = requests.post(GEMINI_URL, json=payload)
     if response.status_code == 200:
         try:
-            return response.json()['candidates'][0]['content']['parts'][0]['text']
+            parts = response.json()["candidates"][0]["content"].get("parts", [])
+            story_text = " ".join([p.get("text", "") for p in parts]).strip()
+            return story_text
         except Exception:
             return ""
     return ""
 
-# Story-style narrated voice summary
-def narrate_meal_story(img: Image.Image):
+def narrate_meal_story_to_audio(img: Image.Image):
     base64_img = image_to_base64(img)
     if base64_img is None:
         st.warning("Invalid image. Please upload a valid meal photo.")
@@ -89,22 +86,27 @@ def narrate_meal_story(img: Image.Image):
     response = requests.post(GEMINI_URL, json=prompt)
     if response.status_code == 200:
         try:
-            story_text = response.json()['candidates'][0]['content']['parts'][0]['text']
-            if story_text.strip():
-                st.markdown("#### Storytelling Summary")
-                st.markdown(f"<div style='background-color:#f0f9ff;padding:15px;border-radius:10px;color:#333;'>{story_text}</div>", unsafe_allow_html=True)
+            parts = response.json()["candidates"][0]["content"].get("parts", [])
+            story_text = " ".join([p.get("text", "") for p in parts]).strip()
+            if story_text:
                 tts = gTTS(story_text, lang='en')
-                tts.save("response.mp3")
-                st.audio("response.mp3", format="audio/mp3")
-                os.remove("response.mp3")
-            else:
-                st.warning("Gemini did not return a valid story.")
-        except Exception:
-            st.error("Failed to parse Gemini response.")
-    else:
-        st.error("Failed to contact Gemini API.")
+                temp_audio_path = "narration.mp3"
+                tts.save(temp_audio_path)
 
-# Macro extractor
+                with open(temp_audio_path, "rb") as f:
+                    audio_bytes = f.read()
+                    st.download_button(label="📥 Download Narration",
+                                       data=audio_bytes,
+                                       file_name="meal_narration.mp3",
+                                       mime="audio/mp3")
+                os.remove(temp_audio_path)
+            else:
+                st.warning("No narration was generated.")
+        except Exception:
+            st.error("Error parsing Gemini response.")
+    else:
+        st.error("Failed to get response from Gemini API.")
+
 def extract_macros(entry):
     fat = protein = carbs = None
     fat_match = re.search(r"Fat\W*(\d+)", entry, re.IGNORECASE)
@@ -114,7 +116,6 @@ def extract_macros(entry):
         return int(fat_match.group(1)), int(protein_match.group(1)), int(carbs_match.group(1))
     return None, None, None
 
-# Upload or camera input
 meal_type = st.selectbox("Select Meal Type", ["Breakfast", "Lunch", "Dinner", "Snack"])
 use_camera = st.checkbox("Enable Camera")
 image = None
@@ -128,7 +129,6 @@ else:
     if uploaded_file:
         image = Image.open(uploaded_file)
 
-# Analysis
 if image:
     st.image(image, caption="Your Meal", width=700)
     st.session_state.last_image = image
@@ -150,7 +150,6 @@ if image:
         st.subheader("Macro Distribution")
         st.pyplot(fig1)
 
-        # Gut health warnings
         warnings = []
         bad_gut_notes = []
         if fat > 30:
@@ -168,7 +167,6 @@ if image:
             st.markdown("<div style='background-color:#ffcccc;padding:10px;border-radius:10px;color:black;'>"
                         + "<br>".join(bad_gut_notes) + "</div>", unsafe_allow_html=True)
 
-# Diet advice block
 st.markdown("---")
 st.subheader("What's Missing in Your Diet?")
 st.markdown("""
@@ -184,12 +182,12 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# Storytelling reflection
+# Narrated Insight as Downloadable MP3
 st.markdown("---")
 st.subheader("Narrated Nutrition Insight")
 if image:
-    with st.spinner("Creating a personalized reflection..."):
-        narrate_meal_story(image)
+    with st.spinner("Generating audio story..."):
+        narrate_meal_story_to_audio(image)
 else:
     st.info("Please upload or capture a meal image first.")
 
@@ -209,7 +207,7 @@ for meal, entries in st.session_state.meal_logs.items():
             else:
                 st.markdown("- Calories not detected.")
 
-# Daily Summary
+# Summary
 st.markdown("---")
 st.subheader("Daily Nutrition Summary")
 st.markdown(f"<h4 style='color: darkgreen;'>Total Calories Today: <strong>{total} kcal</strong></h4>", unsafe_allow_html=True)
