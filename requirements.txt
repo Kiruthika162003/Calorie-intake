@@ -1,0 +1,5 @@
+streamlit-webrtc
+av
+opencv-python
+
+
