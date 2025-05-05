@@ -89,7 +89,7 @@ def extract_macros(entry):
         carbs = int(carbs_match.group(1))
     return fat, protein, carbs
 
-tab1, tab2, tab3 = st.tabs(["Upload or Capture", "Today's Log", "Daily Summary"])
+tab1= st.tabs(["Upload or Capture"])
 
 with tab1:
     meal_type = st.selectbox("Select meal type", ["Breakfast", "Lunch", "Dinner", "Snack"])
