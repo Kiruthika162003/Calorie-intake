@@ -13,11 +13,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from gtts import gTTS
 
-# Set Gemini API Key
+# Gemini API setup
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
-# Initialize session state
+# State
 if "entries" not in st.session_state:
     st.session_state.entries = []
 if "meal_logs" not in st.session_state:
@@ -27,11 +27,13 @@ if "last_meal_result" not in st.session_state:
 if "last_image" not in st.session_state:
     st.session_state.last_image = None
 
+# Page setup
 st.set_page_config(page_title="Calorie Intake Finder", layout="wide")
 
 st.markdown("<h1 style='text-align: center;'>Calorie Intake Finder</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Upload or capture a food image. We’ll estimate calories, flag macro imbalances, and suggest better eating.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Upload or capture a food image. We’ll estimate macros, flag imbalances, and suggest better eating habits.</p>", unsafe_allow_html=True)
 
+# Image conversion
 def image_to_base64(img: Image.Image):
     if img is None:
         return None
@@ -39,6 +41,7 @@ def image_to_base64(img: Image.Image):
     img.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode()
 
+# Calorie + macro estimation
 def query_gemini(image: Image.Image, prompt_text: str):
     base64_img = image_to_base64(image)
     if base64_img is None:
@@ -59,12 +62,49 @@ def query_gemini(image: Image.Image, prompt_text: str):
             return ""
     return ""
 
-def speak_response(text):
-    tts = gTTS(text, lang='en')
-    tts.save("response.mp3")
-    st.audio("response.mp3", format="audio/mp3")
-    os.remove("response.mp3")
+# Story-style narrated voice summary
+def narrate_meal_story(img: Image.Image):
+    base64_img = image_to_base64(img)
+    if base64_img is None:
+        st.warning("Invalid image. Please upload a valid meal photo.")
+        return
 
+    prompt = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": (
+                            "Describe this meal in a human, warm tone as if you're a friendly assistant. "
+                            "Tell a story-style reflection including health aspects, nutrient gaps, and light suggestions. "
+                            "Do not mention Gemini or calories directly. Do not use colons."
+                        )
+                    },
+                    {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
+                ]
+            }
+        ]
+    }
+
+    response = requests.post(GEMINI_URL, json=prompt)
+    if response.status_code == 200:
+        try:
+            story_text = response.json()['candidates'][0]['content']['parts'][0]['text']
+            if story_text.strip():
+                st.markdown("#### Storytelling Summary")
+                st.markdown(f"<div style='background-color:#f0f9ff;padding:15px;border-radius:10px;color:#333;'>{story_text}</div>", unsafe_allow_html=True)
+                tts = gTTS(story_text, lang='en')
+                tts.save("response.mp3")
+                st.audio("response.mp3", format="audio/mp3")
+                os.remove("response.mp3")
+            else:
+                st.warning("Gemini did not return a valid story.")
+        except Exception:
+            st.error("Failed to parse Gemini response.")
+    else:
+        st.error("Failed to contact Gemini API.")
+
+# Macro extractor
 def extract_macros(entry):
     fat = protein = carbs = None
     fat_match = re.search(r"Fat\W*(\d+)", entry, re.IGNORECASE)
@@ -74,7 +114,7 @@ def extract_macros(entry):
         return int(fat_match.group(1)), int(protein_match.group(1)), int(carbs_match.group(1))
     return None, None, None
 
-# Upload or Capture
+# Upload or camera input
 meal_type = st.selectbox("Select Meal Type", ["Breakfast", "Lunch", "Dinner", "Snack"])
 use_camera = st.checkbox("Enable Camera")
 image = None
@@ -88,6 +128,7 @@ else:
     if uploaded_file:
         image = Image.open(uploaded_file)
 
+# Analysis
 if image:
     st.image(image, caption="Your Meal", width=700)
     st.session_state.last_image = image
@@ -109,6 +150,7 @@ if image:
         st.subheader("Macro Distribution")
         st.pyplot(fig1)
 
+        # Gut health warnings
         warnings = []
         bad_gut_notes = []
         if fat > 30:
@@ -124,33 +166,32 @@ if image:
         if bad_gut_notes:
             st.markdown("### **Bad Gut Guys**")
             st.markdown("<div style='background-color:#ffcccc;padding:10px;border-radius:10px;color:black;'>"
-                        + "<br>".join(bad_gut_notes) +
-                        "</div>", unsafe_allow_html=True)
+                        + "<br>".join(bad_gut_notes) + "</div>", unsafe_allow_html=True)
 
-# Diet Improvement Section
+# Diet advice block
 st.markdown("---")
 st.subheader("What's Missing in Your Diet?")
 st.markdown("""
     <div style='background-color: #FFF5E6; padding: 20px; border-radius: 15px; box-shadow: 0px 0px 10px 2px #FFD700;'>
         <p style='color: #FF5733; font-size: 18px; text-align: center;'><strong>Let's Talk About Your Diet!</strong></p>
-        <p style='color: #333; font-size: 16px;'>While we focus on calorie counts and macros, don't forget the <strong>hidden dangers</strong> in your food:</p>
+        <p style='color: #333; font-size: 16px;'>While we focus on macro counts, don't forget the <strong>hidden dangers</strong> in your food:</p>
         <ul style='color: #333; font-size: 14px;'>
-            <li><strong>Sugar:</strong> Too much sugar can lead to energy crashes, weight gain, and insulin resistance.</li>
-            <li><strong>Oil:</strong> Excessive oil can strain digestion and increase bad cholesterol levels.</li>
-            <li><strong>Salt:</strong> High salt intake may lead to high blood pressure and water retention.</li>
+            <li><strong>Sugar:</strong> May lead to energy crashes, weight gain, insulin resistance.</li>
+            <li><strong>Oil:</strong> Excess intake can cause poor digestion and heart stress.</li>
+            <li><strong>Salt:</strong> May raise blood pressure and water retention.</li>
         </ul>
-        <p style='color: #FF5733; font-size: 16px; text-align: center;'><strong>Quick Tip:</strong> Keep a water bottle near you at all times and stay hydrated!</p>
+        <p style='color: #FF5733; font-size: 16px; text-align: center;'><strong>Quick Tip:</strong> Stay hydrated! Keep water near you always.</p>
     </div>
 """, unsafe_allow_html=True)
 
-# Storytelling section
+# Storytelling reflection
+st.markdown("---")
 st.subheader("Narrated Nutrition Insight")
-with st.spinner("Generating reflection..."):
-    story = query_gemini(
-        image,
-        "Describe this meal in a warm, storytelling tone. Highlight what is missing in the diet, suggest improvements, and emphasize the importance of staying hydrated. Encourage the user to keep a water bottle nearby."
-    )
-    
+if image:
+    with st.spinner("Creating a personalized reflection..."):
+        narrate_meal_story(image)
+else:
+    st.info("Please upload or capture a meal image first.")
 
 # Meal History
 st.markdown("---")
@@ -167,33 +208,6 @@ for meal, entries in st.session_state.meal_logs.items():
                 st.markdown(f"- Estimated: **{cals} kcal**")
             else:
                 st.markdown("- Calories not detected.")
-
-# Chat with image context
-st.markdown("---")
-st.subheader("Ask Calorie Finder by Kiruthika")
-user_q = st.text_input("Ask anything about your last meal")
-
-if user_q and st.session_state.last_image:
-    base64_img = image_to_base64(st.session_state.last_image)
-    if base64_img:
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": f"User has a question about this meal: {user_q}. Use the image context to respond."},
-                    {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
-                ]
-            }]
-        }
-        response = requests.post(GEMINI_URL, json=payload)
-        if response.status_code == 200:
-            try:
-                reply = response.json()['candidates'][0]['content']['parts'][0]['text']
-                st.success(reply)
-            except:
-                st.warning("Sorry, couldn't understand the response.")
-else:
-    if user_q:
-        st.warning("Please upload a meal image first.")
 
 # Daily Summary
 st.markdown("---")
@@ -223,6 +237,7 @@ if st.button("Reset for New Day"):
     st.session_state.last_image = None
     st.success("Daily log cleared.")
 
+# Credits
 st.markdown("---")
 st.markdown("""
     <div style='text-align: center; font-family: "Courier New", Courier, monospace; color: #2E8B57; background-color: #F0FFF0; padding: 15px; border-radius: 15px; box-shadow: 0px 0px 10px 2px #ADFF2F;'>
