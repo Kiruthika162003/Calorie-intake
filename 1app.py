@@ -144,26 +144,6 @@ for meal, entries in st.session_state.meal_logs.items():
                 st.markdown(f"- Estimated: **{cals} kcal**")
             else:
                 st.markdown("- Calories not detected.")
-
-# Daily Summary
-st.markdown("---")
-st.subheader("Daily Nutrition Summary")
-st.markdown(f"<h4 style='color: darkgreen;'>Total Calories Today: <strong>{total} kcal</strong></h4>", unsafe_allow_html=True)
-total_fat = total_protein = total_carbs = 0
-for entry in st.session_state.entries:
-    fat, protein, carbs = extract_macros(entry)
-    if fat: total_fat += fat
-    if protein: total_protein += protein
-    if carbs: total_carbs += carbs
-
-if total_fat + total_protein + total_carbs > 0:
-    macros = pd.DataFrame({"Nutrient": ["Fat", "Protein", "Carbs"], "Grams": [total_fat, total_protein, total_carbs]})
-    fig2, ax2 = plt.subplots()
-    ax2.pie(macros["Grams"], labels=macros["Nutrient"], autopct="%1.1f%%", startangle=90)
-    ax2.axis("equal")
-    st.subheader("Total Macro Breakdown")
-    st.pyplot(fig2)
-
 # Chat with Image Context
 st.markdown("---")
 st.subheader("Ask Calorie Finder by Kiruthika")
@@ -190,6 +170,26 @@ else:
     if user_q:
         st.warning("Please upload a meal image first.")
 
+# Daily Summary
+st.markdown("---")
+st.subheader("Daily Nutrition Summary")
+st.markdown(f"<h4 style='color: darkgreen;'>Total Calories Today: <strong>{total} kcal</strong></h4>", unsafe_allow_html=True)
+total_fat = total_protein = total_carbs = 0
+for entry in st.session_state.entries:
+    fat, protein, carbs = extract_macros(entry)
+    if fat: total_fat += fat
+    if protein: total_protein += protein
+    if carbs: total_carbs += carbs
+
+if total_fat + total_protein + total_carbs > 0:
+    macros = pd.DataFrame({"Nutrient": ["Fat", "Protein", "Carbs"], "Grams": [total_fat, total_protein, total_carbs]})
+    fig2, ax2 = plt.subplots()
+    ax2.pie(macros["Grams"], labels=macros["Nutrient"], autopct="%1.1f%%", startangle=90)
+    ax2.axis("equal")
+    st.subheader("Total Macro Breakdown")
+    st.pyplot(fig2)
+
+
 # Reset
 if st.button("Reset for New Day"):
     st.session_state.entries = []
@@ -197,3 +197,5 @@ if st.button("Reset for New Day"):
     st.session_state.last_meal_result = ""
     st.session_state.last_image = None
     st.success("Daily log cleared.")
+st.markdown("---")
+st.markdown("<p style='text-align: center;'>This app was lovingly created by Kiruthika, a self-proclaimed sugar addict who couldn't resist French Vanilla with extra sugar and two bonus sugar packs from Tims. Thankfully, with the help of my amazing Health Coach Bharani, I finally went to rehabilitation!</p>", unsafe_allow_html=True)
