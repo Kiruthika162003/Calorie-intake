@@ -33,12 +33,16 @@ st.markdown("<h1 style='text-align: center;'>Calorie Intake Finder</h1>", unsafe
 st.markdown("<p style='text-align: center;'>Upload or capture a food image. We’ll estimate calories, flag macro imbalances, and suggest better eating.</p>", unsafe_allow_html=True)
 
 def image_to_base64(img: Image.Image):
+    if img is None:
+        return None
     buffered = BytesIO()
     img.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode()
 
 def query_gemini(image: Image.Image, prompt_text: str):
     base64_img = image_to_base64(image)
+    if base64_img is None:
+        return "Image not valid. Please try again with a proper image."
     payload = {
         "contents": [{
             "parts": [
@@ -122,6 +126,7 @@ if image:
             st.markdown("<div style='background-color:#ffcccc;padding:10px;border-radius:10px;color:black;'>"
                         + "<br>".join(bad_gut_notes) +
                         "</div>", unsafe_allow_html=True)
+
 # Diet Improvement Section
 st.markdown("---")
 st.subheader("What's Missing in Your Diet?")
@@ -137,12 +142,15 @@ st.markdown("""
         <p style='color: #FF5733; font-size: 16px; text-align: center;'><strong>Quick Tip:</strong> Keep a water bottle near you at all times and stay hydrated!</p>
     </div>
 """, unsafe_allow_html=True)
+
+# Storytelling section
 st.subheader("Narrated Nutrition Insight")
 with st.spinner("Generating reflection..."):
     story = query_gemini(
-        image, 
+        image,
         "Describe this meal in a warm, storytelling tone. Highlight what is missing in the diet, suggest improvements, and emphasize the importance of staying hydrated. Encourage the user to keep a water bottle nearby."
     )
+    st.write(story)
 
 # Meal History
 st.markdown("---")
@@ -159,28 +167,30 @@ for meal, entries in st.session_state.meal_logs.items():
                 st.markdown(f"- Estimated: **{cals} kcal**")
             else:
                 st.markdown("- Calories not detected.")
-# Chat with Image Context
+
+# Chat with image context
 st.markdown("---")
 st.subheader("Ask Calorie Finder by Kiruthika")
 user_q = st.text_input("Ask anything about your last meal")
 
 if user_q and st.session_state.last_image:
     base64_img = image_to_base64(st.session_state.last_image)
-    payload = {
-        "contents": [{
-            "parts": [
-                {"text": f"User has a question about this meal: {user_q}. Use the image context to respond."},
-                {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
-            ]
-        }]
-    }
-    response = requests.post(GEMINI_URL, json=payload)
-    if response.status_code == 200:
-        try:
-            reply = response.json()['candidates'][0]['content']['parts'][0]['text']
-            st.success(reply)
-        except:
-            st.warning("Sorry, couldn't understand the response.")
+    if base64_img:
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": f"User has a question about this meal: {user_q}. Use the image context to respond."},
+                    {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
+                ]
+            }]
+        }
+        response = requests.post(GEMINI_URL, json=payload)
+        if response.status_code == 200:
+            try:
+                reply = response.json()['candidates'][0]['content']['parts'][0]['text']
+                st.success(reply)
+            except:
+                st.warning("Sorry, couldn't understand the response.")
 else:
     if user_q:
         st.warning("Please upload a meal image first.")
@@ -189,6 +199,7 @@ else:
 st.markdown("---")
 st.subheader("Daily Nutrition Summary")
 st.markdown(f"<h4 style='color: darkgreen;'>Total Calories Today: <strong>{total} kcal</strong></h4>", unsafe_allow_html=True)
+
 total_fat = total_protein = total_carbs = 0
 for entry in st.session_state.entries:
     fat, protein, carbs = extract_macros(entry)
@@ -204,7 +215,6 @@ if total_fat + total_protein + total_carbs > 0:
     st.subheader("Total Macro Breakdown")
     st.pyplot(fig2)
 
-
 # Reset
 if st.button("Reset for New Day"):
     st.session_state.entries = []
@@ -212,6 +222,7 @@ if st.button("Reset for New Day"):
     st.session_state.last_meal_result = ""
     st.session_state.last_image = None
     st.success("Daily log cleared.")
+
 st.markdown("---")
 st.markdown("""
     <div style='text-align: center; font-family: "Courier New", Courier, monospace; color: #2E8B57; background-color: #F0FFF0; padding: 15px; border-radius: 15px; box-shadow: 0px 0px 10px 2px #ADFF2F;'>
