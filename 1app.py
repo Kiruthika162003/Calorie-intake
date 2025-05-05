@@ -5,33 +5,26 @@ import base64
 import os
 from io import BytesIO
 import re
-import cv2
-import numpy as np
-
-# Optional for camera access
-import tempfile
-
-# Set page config as the first Streamlit command
-st.set_page_config(page_title="Calorie Intake Finder", layout="wide")
 
 # Set Gemini API Key
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAK9Fgpj-PeeDkRk-B5dCZwoNdCMWe6gv0")
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
-# Initialize session
+# Initialize session state
 if "entries" not in st.session_state:
     st.session_state.entries = []
 
-st.title("Calorie Intake Finder")
-st.markdown("Upload a food image or capture one using your camera. The system will analyze the food item and estimate its calorie content.")
+st.set_page_config(page_title="Calorie Intake Finder", layout="wide")
+st.title("Calorie Intake Finder using Gemini")
+st.markdown("Upload a food image or capture one using your camera. The system will analyze the food and estimate its calorie content.")
 
-# Convert image to base64 for Gemini
+# Convert image to base64
 def image_to_base64(img: Image.Image):
     buffered = BytesIO()
     img.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode()
 
-# Send to Gemini API
+# Gemini API Call
 def query_gemini_with_image(img: Image.Image):
     base64_img = image_to_base64(img)
     prompt = {
@@ -62,7 +55,7 @@ def query_gemini_with_image(img: Image.Image):
     else:
         return f"Gemini error: {response.status_code}"
 
-# File upload option
+# Upload image
 uploaded_file = st.file_uploader("Upload food image", type=["jpg", "jpeg", "png"])
 if uploaded_file:
     image = Image.open(uploaded_file)
@@ -72,14 +65,9 @@ if uploaded_file:
     st.success(result)
     st.session_state.entries.append(result)
 
-# Camera capture (snapshot)
+# Capture image using camera
 st.subheader("Capture Image from Camera")
-camera_choice = st.radio("Select Camera", options=["Front", "Back"])  # Add radio button
-if camera_choice == "Front":
-    img_file_buffer = st.camera_input("Take a photo", key="front_camera")
-else:
-    img_file_buffer = st.camera_input("Take a photo", key="back_camera")
-
+img_file_buffer = st.camera_input("Take a photo")
 if img_file_buffer is not None:
     img = Image.open(img_file_buffer)
     st.image(img, caption="Captured Image", use_container_width=True)
@@ -88,7 +76,7 @@ if img_file_buffer is not None:
     st.success(result)
     st.session_state.entries.append(result)
 
-# Show log
+# Daily log and calorie summary
 st.subheader("Today's Calorie Log")
 total = 0
 for entry in st.session_state.entries:
