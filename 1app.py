@@ -137,10 +137,9 @@ st.markdown("""
         <p style='color: #FF5733; font-size: 16px; text-align: center;'><strong>Quick Tip:</strong> Keep a water bottle near you at all times and stay hydrated!</p>
     </div>
 """, unsafe_allow_html=True)
-
-    st.subheader("Narrated Nutrition Insight")
-    with st.spinner("Generating reflection..."):
-        story = query_gemini(
+st.subheader("Narrated Nutrition Insight")
+with st.spinner("Generating reflection..."):
+    story = query_gemini(
         image, 
         "Describe this meal in a warm, storytelling tone. Highlight what is missing in the diet, suggest improvements, and emphasize the importance of staying hydrated. Encourage the user to keep a water bottle nearby."
     )
