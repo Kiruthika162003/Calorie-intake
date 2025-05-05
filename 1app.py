@@ -122,7 +122,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["Upload or Capture", "Today's Log", "Dai
 total = 0
 
 with tab1:
-    colL, colR = st.columns([3, 2])
+    colL, colR = st.columns([2, 2])
     with colL:
         meal_type = st.selectbox("Select meal type", ["Breakfast", "Lunch", "Dinner", "Snack"])
         use_camera = st.checkbox("Enable camera")
@@ -138,7 +138,7 @@ with tab1:
                 image = Image.open(uploaded_file)
 
         if image:
-            st.image(image, caption="Your Meal", width=550)
+            st.image(image, caption="Your Meal", width=400)
             with st.spinner("Analyzing your meal..."):
                 result = query_gemini_image_only(image)
                 st.session_state.entries.append(result)
@@ -160,37 +160,23 @@ with tab1:
                 total += int(match.group(1))
 
     with colR:
-        st.markdown("### Narrated Nutrition Insight")
-        with st.spinner("Generating voice summary..."):
-            story = query_gemini_voice_summary(image) if image else ""
-            if story:
-                speak_response(story)
+        if image:
+            st.markdown("### Narrated Nutrition Insight")
+            with st.spinner("Generating voice summary..."):
+                story = query_gemini_voice_summary(image)
+                if story:
+                    speak_response(story)
 
-        st.markdown("### Ask Calorie Finder by Kiruthika")
-        user_q = st.text_input("Ask anything about nutrition")
-        if user_q:
-            prompt = f"Meal context: {st.session_state.meal_context}\nUser question: {user_q}"
-            response = requests.post(GEMINI_URL, json={
-                "contents": [{"parts": [{"text": f"As 'Calorie Finder by Kiruthika', answer based on this context: {prompt}"}]}]
-            })
-            if response.status_code == 200:
-                try:
-                    reply = response.json()['candidates'][0]['content']['parts'][0]['text']
-                    st.markdown(reply)
-                except:
-                    st.warning("Sorry, couldn't understand the query.")
-
-with tab4:
-    st.subheader("Today's Missing Nutrients Summary")
-    if st.session_state.missing_nutrients:
-        missing_summary = pd.DataFrame({"Nutrient": list(set(st.session_state.missing_nutrients))})
-        st.dataframe(missing_summary)
-
-        # Pie chart summary
-        count_series = missing_summary.value_counts().reset_index()
-        fig4, ax4 = plt.subplots()
-        ax4.pie([1]*len(missing_summary), labels=missing_summary["Nutrient"], autopct="%1.1f%%", startangle=90)
-        ax4.axis("equal")
-        st.pyplot(fig4)
-    else:
-        st.info("No missing nutrient information yet.")
+            st.markdown("### Ask Calorie Finder by Kiruthika")
+            user_q = st.text_input("Ask anything about nutrition")
+            if user_q:
+                prompt = f"Meal context: {st.session_state.meal_context}\nUser question: {user_q}"
+                response = requests.post(GEMINI_URL, json={
+                    "contents": [{"parts": [{"text": f"As 'Calorie Finder by Kiruthika', answer based on this context: {prompt}"}]}]
+                })
+                if response.status_code == 200:
+                    try:
+                        reply = response.json()['candidates'][0]['content']['parts'][0]['text']
+                        st.markdown(reply)
+                    except:
+                        st.warning("Sorry, couldn't understand the query.")
