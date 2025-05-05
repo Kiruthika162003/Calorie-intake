@@ -50,11 +50,15 @@ def query_gemini_nutrition(img):
         "contents": [
             {
                 "parts": [
-                    {"text": "Identify the food, return:
-Food: <name>. Calories: <number> kcal. Fat: <number>g, Protein: <number>g, Carbs: <number>g. List any missing: fiber, vitamins, iron, calcium. Mention if it's too oily, fatty, salty, or sugary."},
-                    {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
-                ]
-            }
+                    {
+  "text": (
+    "Identify the food and return:\n"
+    "Food <name>. Calories <number> kcal. Fat <number>g, Protein <number>g, Carbs <number>g.\n"
+    "List any missing: fiber, vitamins, iron, calcium.\n"
+    "Mention if it's too oily, fatty, salty, or sugary."
+  )
+},
+
         ]
     }
     res = requests.post(GEMINI_URL, json=prompt)
