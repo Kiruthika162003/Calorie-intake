@@ -59,7 +59,7 @@ uploaded_file = st.file_uploader("Upload food image", type=["jpg", "jpeg", "png"
 if uploaded_file:
     try:
         image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+        st.image(image, caption="Uploaded Image", width=700)
         st.write("Analyzing...")
         result = query_gemini_with_image(image)
         st.success(result)
