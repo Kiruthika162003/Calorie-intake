@@ -1,8 +1,7 @@
 import streamlit as st
 import requests
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import base64
-import os
 from io import BytesIO
 import re
 
@@ -58,24 +57,33 @@ def query_gemini_with_image(img: Image.Image):
 # Upload image
 uploaded_file = st.file_uploader("Upload food image", type=["jpg", "jpeg", "png"])
 if uploaded_file:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_container_width=True)
-    st.write("Analyzing...")
-    result = query_gemini_with_image(image)
-    st.success(result)
-    st.session_state.entries.append(result)
+    try:
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Uploaded Image", use_container_width=True)
+        st.write("Analyzing...")
+        result = query_gemini_with_image(image)
+        st.success(result)
+        st.session_state.entries.append(result)
+    except UnidentifiedImageError:
+        st.error("The uploaded file is not a valid image.")
+    except Exception as e:
+        st.error(f"Unexpected error processing image: {e}")
 
 # Capture image using camera
 st.subheader("Capture Image from Camera")
 img_file_buffer = st.camera_input("Take a photo")
 if img_file_buffer is not None:
-    img = Image.open(img_file_buffer)
-    st.image(img, caption="Captured Image", width=700)  # or any desired width
-
-    st.write("Analyzing...")
-    result = query_gemini_with_image(img)
-    st.success(result)
-    st.session_state.entries.append(result)
+    try:
+        img = Image.open(img_file_buffer)
+        st.image(img, caption="Captured Image", width=700)
+        st.write("Analyzing...")
+        result = query_gemini_with_image(img)
+        st.success(result)
+        st.session_state.entries.append(result)
+    except UnidentifiedImageError:
+        st.error("Captured image is invalid.")
+    except Exception as e:
+        st.error(f"Unexpected error processing captured image: {e}")
 
 # Daily log and calorie summary
 st.subheader("Today's Calorie Log")
