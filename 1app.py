@@ -150,7 +150,7 @@ with st.spinner("Generating reflection..."):
         image,
         "Describe this meal in a warm, storytelling tone. Highlight what is missing in the diet, suggest improvements, and emphasize the importance of staying hydrated. Encourage the user to keep a water bottle nearby."
     )
-    st.write(story)
+    
 
 # Meal History
 st.markdown("---")
