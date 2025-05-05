@@ -1,3 +1,5 @@
+# Calorie Finder by Kiruthika (Streamlit App)
+
 import os
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -5,255 +7,192 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 import streamlit as st
 import requests
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import base64
 from io import BytesIO
 import re
 import matplotlib.pyplot as plt
 import pandas as pd
 from gtts import gTTS
-import time  # For potential rate limiting
 
-# --- Configuration ---
+# Set Gemini API Key
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-APP_TITLE = "🍎 Calorie Intake Finder"
-APP_DESCRIPTION = "Estimate calories and get insights from your food photos."
 
-# --- Initialize Session State ---
-if "meal_entries" not in st.session_state:
-    st.session_state.meal_entries = []
-if "daily_summary" not in st.session_state:
-    st.session_state.daily_summary = {"calories": 0, "fat": 0, "protein": 0, "carbs": 0}
-if "last_analysis" not in st.session_state:
-    st.session_state.last_analysis = {}
+# Initialize session state
+if "entries" not in st.session_state:
+    st.session_state.entries = []
+if "meal_logs" not in st.session_state:
+    st.session_state.meal_logs = {"Breakfast": [], "Lunch": [], "Dinner": [], "Snack": []}
+if "last_meal_result" not in st.session_state:
+    st.session_state.last_meal_result = ""
 
-st.set_page_config(page_title=APP_TITLE, layout="wide")
+st.set_page_config(page_title="Calorie Intake Finder", layout="wide")
+st.markdown("<h1 style='text-align: center;'>Calorie Intake Finder</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Upload or capture a food image. We'll estimate calories, identify missing nutrients, and suggest improvements.</p>", unsafe_allow_html=True)
 
-# --- Helper Functions ---
-def image_to_base64(img: Image.Image) -> str:
+def image_to_base64(img: Image.Image):
     buffered = BytesIO()
     img.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode()
 
-@st.cache_data(show_spinner=False)
-def query_gemini(prompt_content: list) -> str:
-    try:
-        response = requests.post(GEMINI_URL, json={"contents": prompt_content}, timeout=15)
-        response.raise_for_status()
-        return response.json()['candidates'][0]['content']['parts'][0]['text']
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error querying Gemini: {e}")
-        return ""
-    except (KeyError, IndexError) as e:
-        st.error(f"Error parsing Gemini response: {e}")
-        return ""
-
-def analyze_food_image(image: Image.Image) -> str:
-    base64_img = image_to_base64(image)
+def query_gemini_image_only(img: Image.Image):
+    base64_img = image_to_base64(img)
     prompt = {
-        "parts": [
-            {"text": "Estimate total calories and macros for the food in the image. Respond in this format: Calories: [kcal]. Fat: [g], Protein: [g], Carbs: [g]. Also, briefly mention if high sugar, salt, or oil is visible."},
-            {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
+        "contents": [
+            {
+                "parts": [
+                    {"text": "Estimate total calories and macros for the food in the image. Respond in this format: Calories <number> kcal. Fat <number>g, Protein <number>g, Carbs <number>g."},
+                    {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
+                ]
+            }
         ]
     }
-    return query_gemini({"contents": [prompt]})
+    response = requests.post(GEMINI_URL, json=prompt)
+    if response.status_code == 200:
+        try:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        except Exception:
+            return ""
+    return ""
 
-@st.cache_data(show_spinner=False)
-def generate_voice_summary(image: Image.Image) -> str:
-    base64_img = image_to_base64(image)
+def query_gemini_voice_summary(img: Image.Image):
+    base64_img = image_to_base64(img)
     prompt = {
-        "parts": [
-            {"text": "Describe this meal in a human, warm tone. Briefly reflect on potential health aspects, possible missing nutrients, and very light, encouraging suggestions for improvement. Mention if it appears to have too much oil, sugar, or salt and why that might be a concern. Do not explicitly mention Gemini or specific calorie/macro numbers."},
-            {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
+        "contents": [
+            {
+                "parts": [
+                    {"text": "Describe this meal in a human, warm tone as if you're a friendly assistant. Tell a story-style reflection including health aspects, nutrient gaps, and light suggestions. Do not mention Gemini or calories directly. Do not use colons."},
+                    {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
+                ]
+            }
         ]
     }
-    return query_gemini({"contents": [prompt]})
+    response = requests.post(GEMINI_URL, json=prompt)
+    if response.status_code == 200:
+        try:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        except Exception:
+            return ""
+    return ""
 
-def speak_response(text: str):
-    try:
-        tts = gTTS(text=text, lang='en')
-        tts.save("response.mp3")
-        st.audio("response.mp3", format="audio/mp3")
-        os.remove("response.mp3")
-    except Exception as e:
-        st.warning(f"Could not generate speech: {e}")
+def speak_response(text):
+    tts = gTTS(text, lang='en')
+    tts.save("response.mp3")
+    st.audio("response.mp3", format="audio/mp3")
+    os.remove("response.mp3")
 
-def extract_macros(analysis_text: str) -> tuple[int | None, int | None, int | None]:
-    fat_match = re.search(r"Fat:\W*(\d+)", analysis_text, re.IGNORECASE)
-    protein_match = re.search(r"Protein:\W*(\d+)", analysis_text, re.IGNORECASE)
-    carbs_match = re.search(r"Carbs:\W*(\d+)", analysis_text, re.IGNORECASE)
-    fat = int(fat_match.group(1)) if fat_match else None
-    protein = int(protein_match.group(1)) if protein_match else None
-    carbs = int(carbs_match.group(1)) if carbs_match else None
-    return fat, protein, carbs
+def extract_macros(entry):
+    fat = protein = carbs = None
+    fat_match = re.search(r"Fat\W*(\d+)", entry, re.IGNORECASE)
+    protein_match = re.search(r"Protein\W*(\d+)", entry, re.IGNORECASE)
+    carbs_match = re.search(r"Carbs\W*(\d+)", entry, re.IGNORECASE)
+    if fat_match and protein_match and carbs_match:
+        return int(fat_match.group(1)), int(protein_match.group(1)), int(carbs_match.group(1))
+    return None, None, None
 
-def extract_calories(analysis_text: str) -> int | None:
-    calorie_match = re.search(r"Calories:\W*(\d+)", analysis_text, re.IGNORECASE)
-    return int(calorie_match.group(1)) if calorie_match else None
-
-def display_pie_chart(data: list, labels: list, title: str):
-    if any(data):
-        fig, ax = plt.subplots()
-        ax.pie(data, labels=labels, autopct="%1.1f%%", startangle=90)
-        ax.axis("equal")
-        st.subheader(title)
-        st.pyplot(fig)
-    else:
-        st.info(f"No data available for {title}.")
-
-def ask_calorie_finder(query: str) -> str:
-    prompt = {
-        "parts": [{"text": f"As 'Calorie Finder', answer warmly and clearly. Question: {query}"}]
-    }
-    return query_gemini({"contents": [prompt]})
-
-# --- Main App Layout ---
-st.title(APP_TITLE)
-st.markdown(APP_DESCRIPTION)
-st.markdown("---")
-
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["Analyze Meal", "Today's Log", "Daily Summary", "Nutrition Basics", "Considerations"])
+# Tabs
+tab1, tab2, tab3 = st.tabs(["Upload or Capture", "Today's Log", "Daily Summary"])
 
 with tab1:
-    st.header("Log Your Meal")
-    meal_type = st.selectbox("Meal Type", ["Breakfast", "Lunch", "Dinner", "Snack"], help="Select the type of meal you are logging.")
+    meal_type = st.selectbox("Select meal type", ["Breakfast", "Lunch", "Dinner", "Snack"])
+    use_camera = st.checkbox("Enable camera")
+    image = None
 
-    col1, col2 = st.columns([1, 2])
+    if use_camera:
+        img_file_buffer = st.camera_input("Take a photo")
+        if img_file_buffer:
+            image = Image.open(img_file_buffer)
+    else:
+        uploaded_file = st.file_uploader("Upload image", type=["jpg", "jpeg", "png"])
+        if uploaded_file:
+            image = Image.open(uploaded_file)
 
-    with col1:
-        image = st.camera_input("Capture Food Image", help="Take a photo of your meal.") if st.checkbox("Use Camera") else st.file_uploader("Upload Food Image", type=["jpg", "jpeg", "png"], help="Upload an image of your meal.")
+    if image:
+        st.image(image, caption="Your Meal", width=700)
+        with st.spinner("Analyzing your meal..."):
+            calorie_result = query_gemini_image_only(image)
+            st.session_state.entries.append(calorie_result)
+            st.session_state.meal_logs[meal_type].append(calorie_result)
+            st.session_state.last_meal_result = calorie_result
+            fat, protein, carbs = extract_macros(calorie_result)
 
-    with col2:
-        if image:
-            st.image(image, caption="Your Meal", use_column_width=True)
-            with st.spinner("Analyzing..."):
-                try:
-                    img = Image.open(image)
-                    analysis_result = analyze_food_image(img)
-                    st.session_state.last_analysis = {"type": meal_type, "image": img, "analysis": analysis_result}
-                    st.session_state.meal_entries.append(st.session_state.last_analysis)
-                    st.success("Analysis complete!")
-                except Exception as e:
-                    st.error(f"Error processing image: {e}")
+        if st.session_state.last_meal_result:
+            match = re.search(r"Calories\W*(\d+)", st.session_state.last_meal_result)
+            if match:
+                st.markdown(f"### Calories in this Meal: **{match.group(1)} kcal**")
 
-            if st.session_state.last_analysis.get("analysis"):
-                st.markdown("---")
-                st.subheader("Analysis:")
-                st.info(st.session_state.last_analysis["analysis"])
+            if fat is not None:
+                macros = pd.DataFrame({"Nutrient": ["Fat", "Protein", "Carbs"], "Grams": [fat, protein, carbs]})
+                fig1, ax1 = plt.subplots()
+                ax1.pie(macros["Grams"], labels=macros["Nutrient"], autopct="%1.1f%%", startangle=90)
+                ax1.axis("equal")
+                st.subheader("Macro Distribution (Pie Chart)")
+                st.pyplot(fig1)
 
-                calories = extract_calories(st.session_state.last_analysis["analysis"])
-                fat, protein, carbs = extract_macros(st.session_state.last_analysis["analysis"])
+            st.markdown("---")
+            st.subheader("Narrated Nutrition Insight")
+            with st.spinner("Generating voice summary..."):
+                story = query_gemini_voice_summary(image)
+                if story:
+                    speak_response(story)
 
-                if calories is not None:
-                    st.metric("Estimated Calories", f"{calories} kcal")
-
-                if all([fat is not None, protein is not None, carbs is not None]):
-                    display_pie_chart([fat, protein, carbs], ["Fat", "Protein", "Carbs"], "Macro Distribution")
-
-                if any(keyword in st.session_state.last_analysis["analysis"].lower() for keyword in ["high sugar", "high salt", "high oil"]):
-                    st.warning("This meal appears to have notable amounts of sugar, salt, or oil.")
-
-                st.markdown("---")
-                st.subheader("Gentle Reflection:")
-                with st.spinner("Generating reflection..."):
-                    voice_summary = generate_voice_summary(st.session_state.last_analysis["image"])
-                    if voice_summary:
-                        st.info(voice_summary)
-                        if st.checkbox("Hear a summary"):
-                            speak_response(voice_summary)
-
-                st.markdown("---")
-                st.subheader("Ask about this meal:")
-                user_question = st.text_input("Your question about this meal")
-                if user_question:
-                    with st.spinner("Thinking..."):
-                        response = ask_calorie_finder(f"Regarding the meal you just analyzed: {user_question}")
-                        st.info(response)
+            st.subheader("Ask Calorie Finder by Kiruthika")
+            user_q = st.text_input("Ask anything about nutrition")
+            if user_q:
+                response = requests.post(GEMINI_URL, json={
+                    "contents": [{
+                        "parts": [{"text": f"As 'Calorie Finder by Kiruthika', answer warmly and clearly without referring to any image or previous content. Question: {user_q}"}]
+                    }]
+                })
+                if response.status_code == 200:
+                    try:
+                        reply = response.json()['candidates'][0]['content']['parts'][0]['text']
+                        st.markdown(reply)
+                    except:
+                        st.warning("Sorry, couldn't understand the query.")
 
 with tab2:
-    st.header("Today's Meal Log")
-    if st.session_state.meal_entries:
-        for entry in reversed(st.session_state.meal_entries):
-            st.subheader(f"{entry['type']}")
-            st.image(entry['image'], caption="Meal Image", width=300)
-            st.info(entry['analysis'])
-            calories = extract_calories(entry['analysis'])
-            if calories:
-                st.metric("Estimated Calories", f"{calories} kcal")
-                st.info(f"Suggested Activity: Approximately {calories * 20} steps.")
+    st.subheader("Meal-wise Log")
+    total = 0
+    for meal, entries in st.session_state.meal_logs.items():
+        if entries:
+            st.markdown(f"**{meal}**")
+            for entry in entries:
+                st.write(entry)
+                match = re.search(r"Calories: (?:approximately\s*)?(\d+)(?:-\d+)? kcal", entry, re.IGNORECASE)
+                if match:
+                    calories = int(match.group(1))
+                    total += calories
+                    steps = calories * 20
+                    st.info(f"Suggested activity: Walk approximately {steps} steps.")
+                else:
+                    st.warning("Could not extract calorie information.")
             st.markdown("---")
-    else:
-        st.info("No meals logged yet today. Start by analyzing a meal in the 'Analyze Meal' tab.")
 
 with tab3:
-    st.header("Daily Nutritional Summary")
-    total_calories = 0
-    total_fat = 0
-    total_protein = 0
-    total_carbs = 0
+    st.subheader("Total Summary")
+    st.markdown(f"<h4 style='color: darkgreen;'>Total Calories Consumed Today: <strong>{total} kcal</strong></h4>", unsafe_allow_html=True)
+    total_fat = total_protein = total_carbs = 0
+    for entry in st.session_state.entries:
+        fat, protein, carbs = extract_macros(entry)
+        if fat: total_fat += fat
+        if protein: total_protein += protein
+        if carbs: total_carbs += carbs
 
-    for entry in st.session_state.meal_entries:
-        calories = extract_calories(entry['analysis'])
-        fat, protein, carbs = extract_macros(entry['analysis'])
+    if total_fat + total_protein + total_carbs > 0:
+        macros = pd.DataFrame({"Nutrient": ["Fat", "Protein", "Carbs"], "Grams": [total_fat, total_protein, total_carbs]})
+        fig2, ax2 = plt.subplots()
+        ax2.bar(macros["Nutrient"], macros["Grams"])
+        ax2.set_ylabel("Grams")
+        ax2.set_title("Macro Distribution (Bar Chart)")
+        st.subheader("Macro Breakdown (Bar Chart)")
+        st.pyplot(fig2)
+    else:
+        st.info("Macro information (Fat, Protein, Carbs) not available in the responses yet.")
 
-        if calories:
-            total_calories += calories
-        if fat:
-            total_fat += fat
-        if protein:
-            total_protein += protein
-        if carbs:
-            total_carbs += carbs
-
-    st.metric("Total Calories Today", f"{total_calories} kcal")
-    display_pie_chart([total_fat, total_protein, total_carbs], ["Fat", "Protein", "Carbs"], "Total Macro Breakdown")
-
-    if st.button("Start New Day"):
-        st.session_state.meal_entries = []
-        st.session_state.daily_summary = {"calories": 0, "fat": 0, "protein": 0, "carbs": 0}
-        st.session_state.last_analysis = {}
-        st.success("Daily log cleared. Ready for a new day!")
-
-with tab4:
-    st.header("Understanding Basic Nutrition")
-    st.markdown("""
-    A balanced diet is crucial for overall health and well-being. It involves consuming the right proportions of essential nutrients. Here's a brief overview:
-    """)
-    st.subheader("Key Components:")
-    st.markdown("""
-    - **Calories:** The energy your body uses to perform daily activities. Individual needs vary.
-    - **Macronutrients:**
-        - **Protein:** Essential for building and repairing tissues, enzyme and hormone production. Sources include meat, poultry, fish, beans, lentils, tofu, and dairy.
-        - **Carbohydrates:** The body's primary source of energy. Found in grains, fruits, vegetables, and dairy. Choose complex carbs (whole grains, vegetables) over simple carbs (sugary drinks, processed foods).
-        - **Fats:** Important for hormone production, nutrient absorption, and cell function. Include healthy fats from avocados, nuts, seeds, olive oil, and fatty fish. Limit saturated and trans fats.
-    - **Micronutrients:** Vitamins and minerals needed in small amounts for various bodily functions. Obtain these through a diverse diet.
-    - **Fiber:** Aids digestion, regulates blood sugar, and promotes satiety. Found in fruits, vegetables, whole grains, and legumes.
-    - **Water:** Essential for hydration, temperature regulation, and many other bodily processes.
-    """)
-    st.subheader("General Dietary Guidelines:")
-    st.markdown("""
-    - **Variety is Key:** Eat a wide range of foods from all food groups.
-    - **Prioritize Whole Foods:** Choose minimally processed foods over highly processed options.
-    - **Portion Control:** Be mindful of serving sizes.
-    - **Limit Added Sugars, Salt, and Unhealthy Fats:** These can contribute to various health issues.
-    - **Stay Hydrated:** Drink plenty of water throughout the day.
-    - **Listen to Your Body:** Pay attention to hunger and fullness cues.
-    """)
-    st.info("For personalized dietary advice, consult a registered dietitian or nutritionist.")
-
-with tab5:
-    st.header("Important Considerations")
-    st.markdown("""
-    - **AI Analysis Limitations:** The calorie and macro estimations provided by this app are based on image analysis and may not always be perfectly accurate. Factors like portion size, hidden ingredients, and image quality can affect the results.
-    - **Individual Needs:** Nutritional requirements vary based on age, sex, activity level, and health conditions. The information provided here is for general awareness and should not replace professional medical or nutritional advice.
-    - **Focus on Overall Diet:** While tracking calories and macros can be helpful, it's essential to focus on the quality and balance of your overall diet. Nutrient-dense foods are more important than just hitting specific numbers.
-    - **This Tool is for Awareness:** Use this app as a tool to gain a better understanding of your food intake, but always consult with healthcare professionals for personalized guidance on your diet and health.
-    """)
-    st.warning("This app provides estimations and should not be used for medical or diagnostic purposes.")
-
-# --- Sidebar ---
-st.sidebar.header("About " + APP_TITLE)
-st.sidebar.info(f"{APP_DESCRIPTION} It uses AI to analyze food images and provide estimated nutritional information.")
-st.sidebar.markdown("[Developed with Streamlit and Gemini](https://ai.google.dev/gemini-api)")
-st.sidebar.markdown("By [Your Name/Organization]")
+    if st.button("Reset for New Day"):
+        st.session_state.entries = []
+        st.session_state.meal_logs = {"Breakfast": [], "Lunch": [], "Dinner": [], "Snack": []}
+        st.session_state.last_meal_result = ""
+        st.success("Daily log has been cleared.")
