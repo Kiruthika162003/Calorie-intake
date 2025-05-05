@@ -1,4 +1,4 @@
-# ✅ FINALIZED: Calorie Finder by Kiruthika — Streamlit App Polished for Scalability & UX
+# ✅ FINALIZED: Calorie Finder by Kiruthika — Fully Debugged Version
 
 import os
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -7,7 +7,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 import streamlit as st
 import requests
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 import base64
 from io import BytesIO
 import re
@@ -51,14 +51,21 @@ def query_gemini_nutrition(img):
             {
                 "parts": [
                     {
-  "text": (
-    "Identify the food and return:\n"
-    "Food <name>. Calories <number> kcal. Fat <number>g, Protein <number>g, Carbs <number>g.\n"
-    "List any missing: fiber, vitamins, iron, calcium.\n"
-    "Mention if it's too oily, fatty, salty, or sugary."
-  )
-},
-
+                        "text": (
+                            "Identify the food and return:\n"
+                            "Food <name>. Calories <number> kcal. Fat <number>g, Protein <number>g, Carbs <number>g.\n"
+                            "List any missing: fiber, vitamins, iron, calcium.\n"
+                            "Mention if it's too oily, fatty, salty, or sugary."
+                        )
+                    },
+                    {
+                        "inlineData": {
+                            "mimeType": "image/jpeg",
+                            "data": base64_img
+                        }
+                    }
+                ]
+            }
         ]
     }
     res = requests.post(GEMINI_URL, json=prompt)
@@ -73,8 +80,18 @@ def query_gemini_voice(img):
         "contents": [
             {
                 "parts": [
-                    {"text": "Describe this meal in a human, engaging story. Mention nutrition, missing items, and advice without saying calories or using colons."},
-                    {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
+                    {
+                        "text": (
+                            "Describe this meal in a human, engaging story."
+                            " Mention nutrition, missing items, and advice without saying calories or using colons."
+                        )
+                    },
+                    {
+                        "inlineData": {
+                            "mimeType": "image/jpeg",
+                            "data": base64_img
+                        }
+                    }
                 ]
             }
         ]
@@ -139,7 +156,7 @@ with page1:
             st.success(f"Meal: {parsed['name']} | Calories: {parsed['calories']} kcal")
             st.info(f"Alerts: {', '.join(parsed['alerts']) if parsed['alerts'] else 'None'}")
 
-            # Pie
+            # Pie Chart
             fig, ax = plt.subplots()
             ax.pie([parsed['fat'], parsed['protein'], parsed['carbs']], labels=["Fat", "Protein", "Carbs"], autopct='%1.1f%%')
             ax.axis('equal')
