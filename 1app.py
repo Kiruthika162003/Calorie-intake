@@ -58,7 +58,7 @@ def speak_text(text):
     os.remove("voice.mp3")
 
 def extract_details(entry):
-    name = re.search(r"Food\W*(.+?)\.\s", entry)
+    name = re.search(r"Food\W*(.+?)\.", entry)
     fat = re.search(r"Fat\W*(\d+)", entry)
     protein = re.search(r"Protein\W*(\d+)", entry)
     carbs = re.search(r"Carbs\W*(\d+)", entry)
@@ -156,9 +156,13 @@ with tab3:
 with tab4:
     st.subheader("Missing Nutrients")
     if st.session_state.missing_nutrients:
-        df = pd.DataFrame({"Nutrient": st.session_state.missing_nutrients})
+        df = pd.DataFrame(st.session_state.missing_nutrients, columns=["Nutrient"])
+        gap_counts = df.value_counts().reset_index(name='Count')
         fig, ax = plt.subplots()
-        df.value_counts().plot(kind="barh", ax=ax)
+        ax.scatter(gap_counts.index, gap_counts['Count'], s=300)
+        ax.set_xticks(gap_counts.index)
+        ax.set_xticklabels(gap_counts['Nutrient'], rotation=45, ha="right")
+        ax.set_title("Nutrient Gaps Across the Day")
         st.pyplot(fig)
     else:
         st.info("No gaps detected.")
