@@ -5,7 +5,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 import streamlit as st
 import requests
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 import base64
 from io import BytesIO
 import re
@@ -40,7 +40,7 @@ def query_gemini_image_only(img: Image.Image):
         "contents": [
             {
                 "parts": [
-                    {"text": "Estimate total calories and macros for the food in the image. Respond in this format: Calories kcal. Fat g, Protein g, Carbs g. If high sugar, oil, or salt is visible, mention it."},
+                    {"text": "Estimate total calories and macros for the food in the image. Respond in this format: Calories kcal. Fat g, Protein g, Carbs g. If high sugar, salt, or oil is visible, mention it."},
                     {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
                 ]
             }
@@ -89,15 +89,11 @@ def extract_macros(entry):
         return int(fat_match.group(1)), int(protein_match.group(1)), int(carbs_match.group(1))
     return None, None, None
 
-def pie_chart_missing_macros(fat, protein, carbs):
-    expected = {'Fat': 20, 'Protein': 30, 'Carbs': 50}
-    actual = {'Fat': fat or 0, 'Protein': protein or 0, 'Carbs': carbs or 0}
-    missing = {k: max(0, expected[k] - actual[k]) for k in expected}
-    df = pd.DataFrame(list(missing.items()), columns=['Nutrient', 'Missing'])
+def pie_chart(data, labels, title):
     fig, ax = plt.subplots()
-    ax.pie(df['Missing'], labels=df['Nutrient'], autopct='%1.1f%%', startangle=90)
-    ax.axis('equal')
-    st.subheader("What's Missing from Your Meal?")
+    ax.pie(data, labels=labels, autopct="%1.1f%%", startangle=90)
+    ax.axis("equal")
+    st.subheader(title)
     st.pyplot(fig)
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["Upload or Capture", "Today's Log", "Daily Summary", "Balanced Diet", "Warnings"])
@@ -129,16 +125,14 @@ with tab1:
             if match:
                 st.markdown(f"### Calories in this Meal: {match.group(1)} kcal")
             if fat is not None:
-                macros = pd.DataFrame({"Nutrient": ["Fat", "Protein", "Carbs"], "Grams": [fat, protein, carbs]})
-                fig1, ax1 = plt.subplots()
-                ax1.pie(macros["Grams"], labels=macros["Nutrient"], autopct="%1.1f%%", startangle=90)
-                ax1.axis("equal")
-                st.subheader("Macro Distribution (Pie Chart)")
-                st.pyplot(fig1)
-                pie_chart_missing_macros(fat, protein, carbs)
+                pie_chart([fat, protein, carbs], ["Fat", "Protein", "Carbs"], "Macro Distribution (Pie Chart)")
+                expected = [20, 30, 50]
+                actual = [fat, protein, carbs]
+                missing = [max(0, expected[i] - actual[i]) for i in range(3)]
+                pie_chart(missing, ["Fat", "Protein", "Carbs"], "What's Missing from Your Meal?")
 
             if any(x in st.session_state.last_meal_result.lower() for x in ["sugar", "salt", "oil"]):
-                st.warning("⚠️ Warning: This meal may contain high sugar, salt, or oil. These can raise blood pressure, cholesterol, and risk of heart disease.")
+                st.warning("This meal may contain high sugar, salt, or oil. These can raise blood pressure, cholesterol, and risk of heart disease.")
 
             st.markdown("---")
             st.subheader("Narrated Nutrition Insight")
@@ -190,13 +184,7 @@ with tab3:
         if protein: total_protein += protein
         if carbs: total_carbs += carbs
     if total_fat + total_protein + total_carbs > 0:
-        macros = pd.DataFrame({"Nutrient": ["Fat", "Protein", "Carbs"], "Grams": [total_fat, total_protein, total_carbs]})
-        fig2, ax2 = plt.subplots()
-        ax2.bar(macros["Nutrient"], macros["Grams"])
-        ax2.set_ylabel("Grams")
-        ax2.set_title("Macro Breakdown")
-        st.subheader("Macro Breakdown (Bar Chart)")
-        st.pyplot(fig2)
+        pie_chart([total_fat, total_protein, total_carbs], ["Fat", "Protein", "Carbs"], "Total Macro Breakdown (Pie Chart)")
     else:
         st.info("Macro information not available.")
     if st.button("Reset for New Day"):
@@ -206,32 +194,17 @@ with tab3:
         st.success("Daily log has been cleared.")
 
 with tab4:
-    st.subheader("Balanced Diet Guidance")
-    st.markdown("""
-    A balanced meal typically includes:
-    - **Calories**: 400-700 kcal
-    - **Protein**: 20-30 g
-    - **Carbs**: 40-60 g
-    - **Fat**: 15-25 g
-    - **Fiber**: At least 5-10 g
-
-    Nutritional balance ensures sustained energy, muscle support, and proper digestion.
-    """)
-    chart_data = pd.DataFrame({
-        "Nutrient": ["Calories", "Protein", "Carbs", "Fat", "Fiber"],
-        "Ideal Amount": [600, 25, 50, 20, 8]
-    })
-    fig4, ax4 = plt.subplots()
-    ax4.bar(chart_data["Nutrient"], chart_data["Ideal Amount"])
-    ax4.set_title("Ideal Meal Composition")
-    st.pyplot(fig4)
+    st.subheader("Balanced Diet")
+    labels = ["Calories", "Protein", "Carbs", "Fat", "Fiber"]
+    values = [600, 25, 50, 20, 8]
+    pie_chart(values, labels, "Ideal Meal Composition (Pie Chart)")
 
 with tab5:
-    st.subheader("Why Less Sugar, Salt, and Oil?")
+    st.subheader("Why Reduce Sugar, Salt, and Oil?")
     st.markdown("""
-    - **Sugar**: Excess leads to weight gain, diabetes, and energy crashes.
-    - **Salt**: Raises blood pressure and increases heart disease risk.
-    - **Oil**: Too much leads to fat buildup, high cholesterol, and heart issues.
-    
-    Try to limit added sugars and deep-fried or overly salty foods. Prefer grilled, baked, or steamed meals with natural flavorings.
+    - **Sugar**: Can cause energy crashes, obesity, and diabetes.
+    - **Salt**: Linked to high blood pressure and stroke.
+    - **Oil/Fat**: Excess causes cholesterol buildup and weight gain.
+
+    Choose steamed, grilled, or baked foods over fried or sweetened options.
     """)
