@@ -17,7 +17,7 @@ from gtts import gTTS
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
-# State
+# State init
 if "entries" not in st.session_state:
     st.session_state.entries = []
 if "meal_logs" not in st.session_state:
@@ -27,10 +27,12 @@ if "last_meal_result" not in st.session_state:
 if "last_image" not in st.session_state:
     st.session_state.last_image = None
 
+# Page setup
 st.set_page_config(page_title="Calorie Intake Finder", layout="wide")
 st.markdown("<h1 style='text-align: center;'>Calorie Intake Finder</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Upload or capture a food image. We’ll estimate macros, flag imbalances, and suggest better eating habits.</p>", unsafe_allow_html=True)
 
+# Helpers
 def image_to_base64(img: Image.Image):
     if img is None:
         return None
@@ -95,10 +97,8 @@ def narrate_meal_story_to_audio(img: Image.Image):
 
                 with open(temp_audio_path, "rb") as f:
                     audio_bytes = f.read()
-                    st.download_button(label="📥 Download Narration",
-                                       data=audio_bytes,
-                                       file_name="meal_narration.mp3",
-                                       mime="audio/mp3")
+                    st.audio(audio_bytes, format="audio/mp3")
+
                 os.remove(temp_audio_path)
             else:
                 st.warning("No narration was generated.")
@@ -116,6 +116,7 @@ def extract_macros(entry):
         return int(fat_match.group(1)), int(protein_match.group(1)), int(carbs_match.group(1))
     return None, None, None
 
+# Image input
 meal_type = st.selectbox("Select Meal Type", ["Breakfast", "Lunch", "Dinner", "Snack"])
 use_camera = st.checkbox("Enable Camera")
 image = None
@@ -129,6 +130,7 @@ else:
     if uploaded_file:
         image = Image.open(uploaded_file)
 
+# Analysis
 if image:
     st.image(image, caption="Your Meal", width=700)
     st.session_state.last_image = image
@@ -167,6 +169,7 @@ if image:
             st.markdown("<div style='background-color:#ffcccc;padding:10px;border-radius:10px;color:black;'>"
                         + "<br>".join(bad_gut_notes) + "</div>", unsafe_allow_html=True)
 
+# Nutrition tips
 st.markdown("---")
 st.subheader("What's Missing in Your Diet?")
 st.markdown("""
@@ -182,7 +185,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# Narrated Insight as Downloadable MP3
+# Voice-based reflection
 st.markdown("---")
 st.subheader("Narrated Nutrition Insight")
 if image:
@@ -207,7 +210,7 @@ for meal, entries in st.session_state.meal_logs.items():
             else:
                 st.markdown("- Calories not detected.")
 
-# Summary
+# Daily summary
 st.markdown("---")
 st.subheader("Daily Nutrition Summary")
 st.markdown(f"<h4 style='color: darkgreen;'>Total Calories Today: <strong>{total} kcal</strong></h4>", unsafe_allow_html=True)
@@ -235,7 +238,7 @@ if st.button("Reset for New Day"):
     st.session_state.last_image = None
     st.success("Daily log cleared.")
 
-# Credits
+# Footer
 st.markdown("---")
 st.markdown("""
     <div style='text-align: center; font-family: "Courier New", Courier, monospace; color: #2E8B57; background-color: #F0FFF0; padding: 15px; border-radius: 15px; box-shadow: 0px 0px 10px 2px #ADFF2F;'>
