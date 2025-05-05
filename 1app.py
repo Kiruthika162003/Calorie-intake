@@ -122,12 +122,28 @@ if image:
             st.markdown("<div style='background-color:#ffcccc;padding:10px;border-radius:10px;color:black;'>"
                         + "<br>".join(bad_gut_notes) +
                         "</div>", unsafe_allow_html=True)
+# Diet Improvement Section
+st.markdown("---")
+st.subheader("What's Missing in Your Diet?")
+st.markdown("""
+    <div style='background-color: #FFF5E6; padding: 20px; border-radius: 15px; box-shadow: 0px 0px 10px 2px #FFD700;'>
+        <p style='color: #FF5733; font-size: 18px; text-align: center;'><strong>Let's Talk About Your Diet!</strong></p>
+        <p style='color: #333; font-size: 16px;'>While we focus on calorie counts and macros, don't forget the <strong>hidden dangers</strong> in your food:</p>
+        <ul style='color: #333; font-size: 14px;'>
+            <li><strong>Sugar:</strong> Too much sugar can lead to energy crashes, weight gain, and insulin resistance.</li>
+            <li><strong>Oil:</strong> Excessive oil can strain digestion and increase bad cholesterol levels.</li>
+            <li><strong>Salt:</strong> High salt intake may lead to high blood pressure and water retention.</li>
+        </ul>
+        <p style='color: #FF5733; font-size: 16px; text-align: center;'><strong>Quick Tip:</strong> Keep a water bottle near you at all times and stay hydrated!</p>
+    </div>
+""", unsafe_allow_html=True)
 
     st.subheader("Narrated Nutrition Insight")
     with st.spinner("Generating reflection..."):
-        story = query_gemini(image, "Describe this meal in a warm, storytelling tone with health suggestions. No colons or calorie terms.")
-        if story:
-            speak_response(story)
+        story = query_gemini(
+        image, 
+        "Describe this meal in a warm, storytelling tone. Highlight what is missing in the diet, suggest improvements, and emphasize the importance of staying hydrated. Encourage the user to keep a water bottle nearby."
+    )
 
 # Meal History
 st.markdown("---")
@@ -198,4 +214,9 @@ if st.button("Reset for New Day"):
     st.session_state.last_image = None
     st.success("Daily log cleared.")
 st.markdown("---")
-st.markdown("<p style='text-align: center;'>This app was lovingly created by Kiruthika, a self-proclaimed sugar addict who couldn't resist French Vanilla with extra sugar and two bonus sugar packs from Tims. Thankfully, with the help of my amazing Health Coach Bharani, I finally went to rehabilitation!</p>", unsafe_allow_html=True)
+st.markdown("""
+    <div style='text-align: center; font-family: "Courier New", Courier, monospace; color: #2E8B57; background-color: #F0FFF0; padding: 15px; border-radius: 15px; box-shadow: 0px 0px 10px 2px #ADFF2F;'>
+        <p><strong>This app was lovingly created by Kiruthika</strong>, a self-proclaimed sugar addict who couldn't resist French Vanilla with extra sugar and two bonus sugar packs from Tims.</p>
+        <p>But guess what? <em>With the encouragement of my amazing Health Coach Bharani, I finally embraced a healthy lifestyle!</em></p>
+    </div>
+""", unsafe_allow_html=True)
