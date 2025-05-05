@@ -1,3 +1,4 @@
+# ✅ FINAL FIXED VERSION — Calorie Finder by Kiruthika
 
 import os
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -14,242 +15,164 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from gtts import gTTS
 
-# Set Gemini API Key
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
-# Initialize session state
+# Session State Init
 if "entries" not in st.session_state:
     st.session_state.entries = []
 if "meal_logs" not in st.session_state:
     st.session_state.meal_logs = {"Breakfast": [], "Lunch": [], "Dinner": [], "Snack": []}
 if "last_meal_result" not in st.session_state:
     st.session_state.last_meal_result = ""
+if "meal_context" not in st.session_state:
+    st.session_state.meal_context = ""
+if "missing_nutrients" not in st.session_state:
+    st.session_state.missing_nutrients = []
+if "alerts" not in st.session_state:
+    st.session_state.alerts = []
+if "food_name" not in st.session_state:
+    st.session_state.food_name = ""
 
 st.set_page_config(page_title="Calorie Intake Finder", layout="wide")
-st.markdown("## Calorie Intake Finder", unsafe_allow_html=True)
+st.title("Calorie Finder by Kiruthika")
+st.caption("AI-powered meal analysis with nutrition tracking, gaps, voice insights, and personalized tips")
 
-def image_to_base64(img: Image.Image):
+def image_to_base64(img):
     buffered = BytesIO()
     img.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode()
 
-def query_gemini_image_only(img: Image.Image):
-    base64_img = image_to_base64(img)
-    prompt = {
-        "contents": [{
-            "parts": [
-                {"text": "Estimate total calories and macros for the food in the image. Respond in this format: Calories  kcal. Fat g, Protein g, Carbs g."},
-                {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
-            ]
-        }]
+def query_gemini(prompt_text, img=None):
+    parts = [{"text": prompt_text}]
+    if img:
+        parts.append({"inlineData": {"mimeType": "image/jpeg", "data": image_to_base64(img)}})
+    payload = {"contents": [{"parts": parts}]}
+    response = requests.post(GEMINI_URL, json=payload)
+    return response.json()['candidates'][0]['content']['parts'][0]['text'] if response.status_code == 200 else ""
+
+def speak_text(text):
+    tts = gTTS(text)
+    tts.save("voice.mp3")
+    st.audio("voice.mp3")
+    os.remove("voice.mp3")
+
+def extract_details(entry):
+    name = re.search(r"Food\W*(.+?)\.", entry)
+    fat = re.search(r"Fat\W*(\d+)", entry)
+    protein = re.search(r"Protein\W*(\d+)", entry)
+    carbs = re.search(r"Carbs\W*(\d+)", entry)
+    cals = re.search(r"Calories\W*(\d+)", entry)
+    missing = re.findall(r"(fiber|vitamin\w*|iron|calcium|magnesium)", entry, re.IGNORECASE)
+    alerts = [a.capitalize() for a in ["oily", "fatty", "salty", "sugary"] if a in entry.lower()]
+    return {
+        "name": name.group(1) if name else "Unknown",
+        "fat": int(fat.group(1)) if fat else 0,
+        "protein": int(protein.group(1)) if protein else 0,
+        "carbs": int(carbs.group(1)) if carbs else 0,
+        "calories": int(cals.group(1)) if cals else 0,
+        "missing": list(set([m.capitalize() for m in missing])),
+        "alerts": alerts
     }
-    response = requests.post(GEMINI_URL, json=prompt)
-    if response.status_code == 200:
-        try:
-            return response.json()['candidates'][0]['content']['parts'][0]['text']
-        except Exception:
-            return ""
-    return ""
 
-def query_gemini_voice_summary(img: Image.Image):
-    base64_img = image_to_base64(img)
-    prompt = {
-        "contents": [{
-            "parts": [
-                {"text": "Describe this meal in a human, warm tone as if you're a friendly assistant. Tell a story-style reflection including health aspects, nutrient gaps, and light suggestions. Do not mention Gemini or calories directly. Do not use colons."},
-                {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
-            ]
-        }]
-    }
-    response = requests.post(GEMINI_URL, json=prompt)
-    if response.status_code == 200:
-        try:
-            return response.json()['candidates'][0]['content']['parts'][0]['text']
-        except Exception:
-            return ""
-    return ""
+# Tabs
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Meal Assistant", "Today's Log", "Summary", "Nutrition Gaps", "Balanced Diet"])
 
-def speak_response(text):
-    tts = gTTS(text, lang='en')
-    tts.save("response.mp3")
-    st.audio("response.mp3", format="audio/mp3")
-    os.remove("response.mp3")
-
-def extract_macros(entry):
-    fat = protein = carbs = 0
-    fat_match = re.search(r"Fat\W*(\d+)", entry, re.IGNORECASE)
-    protein_match = re.search(r"Protein\W*(\d+)", entry, re.IGNORECASE)
-    carbs_match = re.search(r"Carbs\W*(\d+)", entry, re.IGNORECASE)
-    if fat_match: fat = int(fat_match.group(1))
-    if protein_match: protein = int(protein_match.group(1))
-    if carbs_match: carbs = int(carbs_match.group(1))
-    return fat, protein, carbs
-
-def extract_calories(entry):
-    match = re.search(r"Calories\W*(\d+)", entry, re.IGNORECASE)
-    return int(match.group(1)) if match else 0
-
-def get_missing_nutrients(entry):
-    nutrients = {"Fiber": 0, "Vitamin C": 0, "Calcium": 0}
-    if "Fat" in entry and "Protein" in entry and "Carbs" in entry:
-        nutrients["Fiber"] = 5
-        nutrients["Vitamin C"] = 8
-        nutrients["Calcium"] = 12
-    return nutrients
-
-def aggregate_missing_nutrients(entries):
-    total = {"Fiber": 0, "Vitamin C": 0, "Calcium": 0}
-    for entry in entries:
-        missing = get_missing_nutrients(entry)
-        for k in total:
-            total[k] += missing[k]
-    return total
-
-def plot_pie_chart(data_dict, title):
-    df = pd.DataFrame({"Label": list(data_dict.keys()), "Value": list(data_dict.values())})
-    fig, ax = plt.subplots()
-    ax.pie(df["Value"], labels=df["Label"], autopct="%1.1f%%", startangle=90)
-    ax.axis("equal")
-    ax.set_title(title)
-    return fig
-
-def analyze_warnings(fat, protein, carbs):
-    total = fat + protein + carbs
-    warnings = []
-    if total == 0:
-        return ["No nutrient data to evaluate."]
-    fat_pct = (fat / total) * 100
-    carbs_pct = (carbs / total) * 100
-    if fat_pct > 40:
-        warnings.append("Too oily")
-    if carbs_pct > 60:
-        warnings.append("Too sugary")
-    if not warnings:
-        warnings.append("No warnings")
-    return warnings
-
-# UI Tabs
-tabs = st.tabs(["Upload or Capture", "Today's Log", "Daily Summary", "What's Missing?", "Balanced Diet", "Warnings"])
-tab1, tab2, tab3, tab4, tab5, tab6 = tabs
-
-# Tab 1
 with tab1:
-    total_calories_today = sum(extract_calories(e) for e in st.session_state.entries)
-    st.markdown(f"<h4 style='color:#4CAF50;'>Total Calories So Far: {total_calories_today} kcal</h4>", unsafe_allow_html=True)
-    meal_type = st.selectbox("Select meal type", ["Breakfast", "Lunch", "Dinner", "Snack"])
-    use_camera = st.checkbox("Enable camera")
-    image = None
-    if use_camera:
-        img_file_buffer = st.camera_input("Take a photo")
-        if img_file_buffer:
-            image = Image.open(img_file_buffer)
-    else:
-        uploaded_file = st.file_uploader("Upload image", type=["jpg", "jpeg", "png"])
-        if uploaded_file:
-            image = Image.open(uploaded_file)
+    st.subheader("Upload or Capture Meal")
+    col1, col2 = st.columns(2)
+    with col1:
+        meal_type = st.selectbox("Meal Type", ["Breakfast", "Lunch", "Dinner", "Snack"])
+        image = st.camera_input("Take a photo") if st.checkbox("Use Camera") else st.file_uploader("Upload food image", type=["jpg", "jpeg", "png"])
+        if image:
+            img = Image.open(image)
+            st.image(img, width=300)
+            result = query_gemini(
+                "Identify the food. Return Food <name>. Calories <number> kcal. Fat <number>g, Protein <number>g, Carbs <number>g.\nMention missing: fiber, vitamins, iron, calcium. Mention if too oily, fatty, salty, sugary.",
+                img)
+            st.session_state.entries.append(result)
+            st.session_state.meal_logs[meal_type].append(result)
+            st.session_state.last_meal_result = result
+            st.session_state.meal_context = result
+            parsed = extract_details(result)
+            st.session_state.food_name = parsed["name"]
+            st.session_state.missing_nutrients += parsed["missing"]
+            st.session_state.alerts = parsed["alerts"]
 
-    if image:
-        st.image(image, caption="Your Meal", width=700)
-        with st.spinner("Analyzing your meal..."):
-            calorie_result = query_gemini_image_only(image)
-            st.session_state.entries.append(calorie_result)
-            st.session_state.meal_logs[meal_type].append(calorie_result)
-            st.session_state.last_meal_result = calorie_result
-            fat, protein, carbs = extract_macros(calorie_result)
+            st.success(f"Meal: {parsed['name']} | Calories: {parsed['calories']} kcal")
+            if parsed['alerts']:
+                st.warning(f"⚠️ Alerts: {', '.join(parsed['alerts'])}")
 
-        if st.session_state.last_meal_result:
-            st.markdown(f"<div style='color:#2196F3;'>{st.session_state.last_meal_result}</div>", unsafe_allow_html=True)
-            if fat + protein + carbs > 0:
-                macros = {"Fat": fat, "Protein": protein, "Carbs": carbs}
-                fig1 = plot_pie_chart(macros, "Macro Distribution")
-                st.pyplot(fig1)
+            if parsed['fat'] + parsed['protein'] + parsed['carbs'] > 0:
+                fig, ax = plt.subplots()
+                ax.pie([parsed['fat'], parsed['protein'], parsed['carbs']], labels=["Fat", "Protein", "Carbs"], autopct="%1.1f%%")
+                ax.axis("equal")
+                st.pyplot(fig)
+            else:
+                st.info("Macro data incomplete for chart.")
 
-            st.subheader("Narrated Nutrition Insight")
-            with st.spinner("Generating voice summary..."):
-                story = query_gemini_voice_summary(image)
-                if story:
-                    speak_response(story)
+    with col2:
+        st.subheader("Voice Summary")
+        if image:
+            voice = query_gemini(
+                "Describe this meal like a human nutritionist. Mention balance, what’s missing, and tips. No colons. No Gemini. Human tone.",
+                img)
+            if voice:
+                speak_text(voice)
 
-            st.subheader("Ask Calorie Finder by Kiruthika")
-            user_q = st.text_input("Ask anything about nutrition")
-            if user_q:
-                response = requests.post(GEMINI_URL, json={
-                    "contents": [{
-                        "parts": [{"text": f"As 'Calorie Finder by Kiruthika', answer warmly and clearly without referring to any image or previous content. Question: {user_q}"}]
-                    }]
-                })
-                if response.status_code == 200:
-                    try:
-                        reply = response.json()['candidates'][0]['content']['parts'][0]['text']
-                        st.markdown(reply)
-                    except:
-                        st.warning("Sorry, couldn't understand the query.")
+        st.subheader("Ask Calorie Finder by Kiruthika")
+        user_q = st.text_input("Ask about your meal")
+        if user_q:
+            chat = query_gemini(f"Context: {st.session_state.meal_context}\nQuestion: {user_q}")
+            st.markdown(chat)
 
-# Tab 2
 with tab2:
-    st.subheader("Meal-wise Log")
-    total = 0
-    for meal, entries in st.session_state.meal_logs.items():
-        if entries:
-            st.markdown(f"**{meal}**")
-            for entry in entries:
-                st.write(entry)
-                calories = extract_calories(entry)
-                total += calories
-                st.info(f"Estimated: {calories} kcal | Walk: {calories * 20} steps")
-            st.markdown("---")
+    st.subheader("Today's Meal Log")
+    total_cals = 0
+    for meal, logs in st.session_state.meal_logs.items():
+        if logs:
+            st.markdown(f"### {meal}")
+            for entry in logs:
+                st.text(entry)
+                match = re.search(r"Calories\W*(\d+)", entry)
+                if match:
+                    total_cals += int(match.group(1))
+    st.markdown(f"### 🔥 Total Calories: {total_cals} kcal")
 
-# Tab 3
 with tab3:
-    st.subheader("Daily Summary")
-    total_calories = sum(extract_calories(e) for e in st.session_state.entries)
-    total_fat, total_protein, total_carbs = 0, 0, 0
+    st.subheader("Macro Summary")
+    fat = protein = carbs = 0
     for e in st.session_state.entries:
-        fat, protein, carbs = extract_macros(e)
-        total_fat += fat
-        total_protein += protein
-        total_carbs += carbs
-
-    st.success(f"Total Calories Consumed: {total_calories} kcal")
-    if total_fat + total_protein + total_carbs > 0:
-        fig2 = plot_pie_chart({"Fat": total_fat, "Protein": total_protein, "Carbs": total_carbs}, "Total Macro Breakdown")
-        st.pyplot(fig2)
+        d = extract_details(e)
+        fat += d['fat']
+        protein += d['protein']
+        carbs += d['carbs']
+    if fat + protein + carbs > 0:
+        df = pd.DataFrame({"Nutrient": ["Fat", "Protein", "Carbs"], "Grams": [fat, protein, carbs]})
+        st.bar_chart(df.set_index("Nutrient"))
     else:
-        st.warning("Macro information not available.")
+        st.info("No macros to show yet.")
 
-    if st.button("Reset for New Day"):
-        st.session_state.entries = []
-        st.session_state.meal_logs = {"Breakfast": [], "Lunch": [], "Dinner": [], "Snack": []}
-        st.session_state.last_meal_result = ""
-        st.success("Daily log cleared.")
-
-# Tab 4
 with tab4:
-    st.subheader("Potential Nutrient Gaps")
-    total_missing = aggregate_missing_nutrients(st.session_state.entries)
-    if sum(total_missing.values()) == 0:
-        st.info("No missing nutrients detected.")
+    st.subheader("Missing Nutrients")
+    if st.session_state.missing_nutrients:
+        df = pd.DataFrame(st.session_state.missing_nutrients, columns=["Nutrient"])
+        gap_counts = df.value_counts().reset_index(name='Count')
+        fig, ax = plt.subplots()
+        ax.scatter(gap_counts.index, gap_counts['Count'], s=300)
+        ax.set_xticks(gap_counts.index)
+        ax.set_xticklabels(gap_counts['Nutrient'], rotation=45, ha="right")
+        ax.set_title("Nutrient Gaps Across the Day")
+        st.pyplot(fig)
     else:
-        fig3 = plot_pie_chart(total_missing, "Missing Nutrients")
-        st.pyplot(fig3)
+        st.info("No gaps detected.")
 
-# Tab 5
 with tab5:
-    st.subheader("Balanced Diet Check")
-    if total_fat + total_protein + total_carbs > 0:
-        ideal = {"Fat": 25, "Protein": 25, "Carbs": 50}
-        actual = {"Fat": total_fat, "Protein": total_protein, "Carbs": total_carbs}
-        fig4 = plot_pie_chart(actual, "Your Current Macro Distribution")
-        st.pyplot(fig4)
-        st.markdown("Recommended: 25% Fat, 25% Protein, 50% Carbs")
-    else:
-        st.info("Not enough data for balance analysis.")
-
-# Tab 6
-with tab6:
-    st.subheader("Health Warnings")
-    warnings = analyze_warnings(total_fat, total_protein, total_carbs)
-    for w in warnings:
-        color = "#f44336" if "Too" in w else "#4CAF50"
-        st.markdown(f"<div style='color:{color}; font-weight:bold;'>{w}</div>", unsafe_allow_html=True)
+    st.subheader("Balanced Diet Overview")
+    labels = ["Protein", "Vitamins", "Fiber", "Calcium", "Healthy Fat"]
+    sizes = [25, 20, 20, 15, 20]
+    fig, ax = plt.subplots()
+    ax.pie(sizes, labels=labels, autopct="%1.1f%%")
+    ax.axis("equal")
+    st.pyplot(fig)
+    st.info("Drink at least 2L water/day. Hydration boosts digestion, energy, and cognition.")
