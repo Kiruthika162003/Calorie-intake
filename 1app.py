@@ -120,60 +120,6 @@ with tab1:
         except Exception as e:
             st.error(f"Error: {e}")
 
-with tab2:
-    st.subheader("Meal-wise Log")
-    total = 0
-    for meal, entries in st.session_state.meal_logs.items():
-        if entries:
-            st.markdown(f"**{meal}**")
-            for entry in entries:
-                st.write(entry)
-                match = re.search(r"Calories: (?:approximately\s*)?(\d+)(?:-\d+)? kcal", entry, re.IGNORECASE)
-                if match:
-                    calories = int(match.group(1))
-                    total += calories
-                    steps = calories * 20
-                    st.info(f"Suggested activity: Walk approximately {steps} steps.")
-                else:
-                    st.warning("Could not extract calorie information.")
-            st.markdown("---")
-
-with tab3:
-    st.subheader("Total Summary")
-    st.markdown(f"<h4 style='color: darkgreen;'>Total Calories Consumed Today: <strong>{total} kcal</strong></h4>", unsafe_allow_html=True)
-
-    # Macro Charts
-    total_fat = total_protein = total_carbs = 0
-    for entry in st.session_state.entries:
-        fat, protein, carbs = extract_macros(entry)
-        if fat is not None:
-            total_fat += fat
-        if protein is not None:
-            total_protein += protein
-        if carbs is not None:
-            total_carbs += carbs
-
-    if total_fat + total_protein + total_carbs > 0:
-        macros = pd.DataFrame({
-            "Nutrient": ["Fat", "Protein", "Carbs"],
-            "Grams": [total_fat, total_protein, total_carbs]
-        })
-
-        fig1, ax1 = plt.subplots()
-        ax1.pie(macros["Grams"], labels=macros["Nutrient"], autopct="%1.1f%%", startangle=90)
-        ax1.axis("equal")
-        st.subheader("Macro Distribution (Pie Chart)")
-        st.pyplot(fig1)
-
-        fig2, ax2 = plt.subplots()
-        ax2.bar(macros["Nutrient"], macros["Grams"])
-        ax2.set_ylabel("Grams")
-        ax2.set_title("Macro Distribution (Bar Chart)")
-        st.subheader("Macro Breakdown (Bar Chart)")
-        st.pyplot(fig2)
-    else:
-        st.info("Macro information (Fat, Protein, Carbs) not available in the responses yet.")
-
     if st.button("Reset for New Day"):
         st.session_state.entries = []
         st.session_state.meal_logs = {"Breakfast": [], "Lunch": [], "Dinner": [], "Snack": []}
