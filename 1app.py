@@ -157,10 +157,14 @@ with page1:
             st.info(f"Alerts: {', '.join(parsed['alerts']) if parsed['alerts'] else 'None'}")
 
             # Pie Chart
-            fig, ax = plt.subplots()
-            ax.pie([parsed['fat'], parsed['protein'], parsed['carbs']], labels=["Fat", "Protein", "Carbs"], autopct='%1.1f%%')
-            ax.axis('equal')
-            st.pyplot(fig)
+            if parsed['fat'] > 0 or parsed['protein'] > 0 or parsed['carbs'] > 0:
+              fig, ax = plt.subplots()
+              ax.pie([parsed['fat'], parsed['protein'], parsed['carbs']], labels=["Fat", "Protein", "Carbs"], autopct='%1.1f%%')
+              ax.axis('equal')
+              st.pyplot(fig)
+           else:
+             st.info("Not enough data to plot macro pie chart.")
+
 
     with col2:
         st.subheader("Voice Summary")
