@@ -70,7 +70,8 @@ st.subheader("Capture Image from Camera")
 img_file_buffer = st.camera_input("Take a photo")
 if img_file_buffer is not None:
     img = Image.open(img_file_buffer)
-    st.image(img, caption="Captured Image", use_container_width=True)
+    st.image(img, caption="Captured Image", width=700)  # or any desired width
+
     st.write("Analyzing...")
     result = query_gemini_with_image(img)
     st.success(result)
