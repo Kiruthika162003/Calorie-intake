@@ -26,6 +26,8 @@ if "meal_logs" not in st.session_state:
     st.session_state.meal_logs = {"Breakfast": [], "Lunch": [], "Dinner": [], "Snack": []}
 if "last_meal_result" not in st.session_state:
     st.session_state.last_meal_result = ""
+if "meal_context" not in st.session_state:
+    st.session_state.meal_context = ""
 
 st.set_page_config(page_title="Calorie Intake Finder", layout="wide")
 st.markdown("<h1 style='text-align: center;'>Calorie Intake Finder</h1>", unsafe_allow_html=True)
@@ -42,7 +44,7 @@ def query_gemini_image_only(img: Image.Image):
         "contents": [
             {
                 "parts": [
-                    {"text": "Estimate total calories and macros for the food in the image. Respond in this format: Calories <number> kcal. Fat <number>g, Protein <number>g, Carbs <number>g."},
+                    {"text": "Estimate total calories and macros for the food in the image. Respond in this format: Item: <name>. Calories: <number> kcal. Fat: <number>g, Protein: <number>g, Carbs: <number>g. Mention if any nutrients are missing."},
                     {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
                 ]
             }
@@ -91,6 +93,14 @@ def extract_macros(entry):
         return int(fat_match.group(1)), int(protein_match.group(1)), int(carbs_match.group(1))
     return None, None, None
 
+def extract_missing(entry):
+    keywords = ["fiber", "vitamin", "fat", "iron", "calcium", "greens", "micronutrient"]
+    missing = []
+    for word in keywords:
+        if word in entry.lower():
+            missing.append(word.capitalize())
+    return list(set(missing))
+
 # Tabs
 tab1, tab2, tab3 = st.tabs(["Upload or Capture", "Today's Log", "Daily Summary"])
 
@@ -115,7 +125,9 @@ with tab1:
             st.session_state.entries.append(calorie_result)
             st.session_state.meal_logs[meal_type].append(calorie_result)
             st.session_state.last_meal_result = calorie_result
+            st.session_state.meal_context = calorie_result  # Feed to chat later
             fat, protein, carbs = extract_macros(calorie_result)
+            missing = extract_missing(calorie_result)
 
         if st.session_state.last_meal_result:
             match = re.search(r"Calories\W*(\d+)", st.session_state.last_meal_result)
@@ -130,6 +142,11 @@ with tab1:
                 st.subheader("Macro Distribution (Pie Chart)")
                 st.pyplot(fig1)
 
+            if missing:
+                st.subheader("Potential Nutrients Missing")
+                df_missing = pd.DataFrame({"Potential Gaps": missing})
+                st.dataframe(df_missing)
+
             st.markdown("---")
             st.subheader("Narrated Nutrition Insight")
             with st.spinner("Generating voice summary..."):
@@ -140,9 +157,10 @@ with tab1:
             st.subheader("Ask Calorie Finder by Kiruthika")
             user_q = st.text_input("Ask anything about nutrition")
             if user_q:
+                full_prompt = f"Meal context: {st.session_state.meal_context}\n\nUser question: {user_q}"
                 response = requests.post(GEMINI_URL, json={
                     "contents": [{
-                        "parts": [{"text": f"As 'Calorie Finder by Kiruthika', answer warmly and clearly without referring to any image or previous content. Question: {user_q}"}]
+                        "parts": [{"text": f"As 'Calorie Finder by Kiruthika', use this context and answer warmly without asking again. {full_prompt}"}]
                     }]
                 })
                 if response.status_code == 200:
@@ -155,20 +173,25 @@ with tab1:
 with tab2:
     st.subheader("Meal-wise Log")
     total = 0
+    all_missing = []
     for meal, entries in st.session_state.meal_logs.items():
         if entries:
             st.markdown(f"**{meal}**")
             for entry in entries:
                 st.write(entry)
-                match = re.search(r"Calories: (?:approximately\s*)?(\d+)(?:-\d+)? kcal", entry, re.IGNORECASE)
+                match = re.search(r"Calories\W*(\d+)", entry, re.IGNORECASE)
                 if match:
                     calories = int(match.group(1))
                     total += calories
                     steps = calories * 20
                     st.info(f"Suggested activity: Walk approximately {steps} steps.")
-                else:
-                    st.warning("Could not extract calorie information.")
+                all_missing.extend(extract_missing(entry))
             st.markdown("---")
+
+    if all_missing:
+        st.subheader("Today's Potential Nutrient Gaps")
+        df_missing_today = pd.DataFrame({"Missing Nutrients": list(set(all_missing))})
+        st.dataframe(df_missing_today)
 
 with tab3:
     st.subheader("Total Summary")
@@ -195,4 +218,5 @@ with tab3:
         st.session_state.entries = []
         st.session_state.meal_logs = {"Breakfast": [], "Lunch": [], "Dinner": [], "Snack": []}
         st.session_state.last_meal_result = ""
+        st.session_state.meal_context = ""
         st.success("Daily log has been cleared.")
