@@ -100,7 +100,7 @@ with tab1:
         if img_file_buffer is not None:
             try:
                 img = Image.open(img_file_buffer)
-                st.image(img, caption="Captured Image", use_container_width=True)
+                st.image(img, caption="Captured Image", width=700)
                 st.write("Analyzing...")
                 result = query_gemini_with_image(img, meal_type)
                 st.success(result)
@@ -112,7 +112,7 @@ with tab1:
     if uploaded_file:
         try:
             image = Image.open(uploaded_file)
-            st.image(image, caption="Uploaded Image", use_container_width=True)
+            st.image(image, caption="Uploaded Image", width=700)
             st.write("Analyzing...")
             result = query_gemini_with_image(image, meal_type)
             st.success(result)
