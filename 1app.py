@@ -19,7 +19,7 @@ import toml
 # Robust Gemini API setup with fallback
 try:
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-    st.write("Gemini API key loaded from Streamlit secrets.")
+
 except Exception:
     st.write("Trying to load Gemini API key manually...")
     try:
