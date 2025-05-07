@@ -123,6 +123,31 @@ def extract_macros(entry):
     return None, None, None
 
 meal_type = st.selectbox("Select Meal Type", ["Breakfast", "Lunch", "Dinner", "Snack"])
+# Manual text-based food input
+st.markdown("---")
+st.subheader("Manual Entry: Describe Your Meal")
+user_text_input = st.text_area("Or type in what you ate (e.g., '2 samosas and a mango lassi')")
+
+if user_text_input:
+    with st.spinner("Analyzing your food description..."):
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": f"Estimate calories and macronutrients for this meal: {user_text_input}. Respond in this format: Calories <number> kcal. Fat <number>g, Protein <number>g, Carbs <number>g."}
+                ]
+            }]
+        }
+        response = requests.post(GEMINI_URL, json=payload)
+        if response.status_code == 200:
+            try:
+                parts = response.json()["candidates"][0]["content"].get("parts", [])
+                analysis_text = " ".join([p.get("text", "") for p in parts]).strip()
+                st.markdown(f"<div style='background-color:#e0f7e0;padding:10px;border-radius:10px;color:black;'><strong>Analysis from Text:</strong> {analysis_text}</div>", unsafe_allow_html=True)
+            except Exception:
+                st.error("Gemini response was unreadable.")
+        else:
+            st.error(f"Text-based analysis failed. Status code: {response.status_code}")
+
 use_camera = st.checkbox("Enable Camera")
 image = None
 
