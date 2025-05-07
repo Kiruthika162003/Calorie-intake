@@ -12,9 +12,21 @@ import re
 import matplotlib.pyplot as plt
 import pandas as pd
 from gtts import gTTS
+import toml
 
-# Gemini API setup
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+# Robust Gemini API setup with fallback
+try:
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    st.write("Gemini API key loaded from Streamlit secrets.")
+except Exception:
+    st.write("Trying to load Gemini API key manually...")
+    try:
+        GEMINI_API_KEY = toml.load("/home/ec2-user/.streamlit/secrets.toml")["GEMINI_API_KEY"]
+        st.write("Gemini API key loaded manually from file.")
+    except Exception:
+        st.error("Failed to load Gemini API key. Check your secrets.toml file.")
+        st.stop()
+
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
 # State init
@@ -69,20 +81,18 @@ def narrate_meal_story_to_audio(img: Image.Image):
         return
 
     prompt = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": (
-                            "Describe this meal in a human, warm tone as if you're a friendly assistant. "
-                            "Tell a story-style reflection including health aspects, nutrient gaps, and light suggestions. "
-                            "Do not mention Gemini or calories directly. Do not use colons."
-                        )
-                    },
-                    {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
-                ]
-            }
-        ]
+        "contents": [{
+            "parts": [
+                {
+                    "text": (
+                        "Describe this meal in a human, warm tone as if you're a friendly assistant. "
+                        "Tell a story-style reflection including health aspects, nutrient gaps, and light suggestions. "
+                        "Do not mention Gemini or calories directly. Do not use colons."
+                    )
+                },
+                {"inlineData": {"mimeType": "image/jpeg", "data": base64_img}}
+            ]
+        }]
     }
 
     response = requests.post(GEMINI_URL, json=prompt)
@@ -94,11 +104,9 @@ def narrate_meal_story_to_audio(img: Image.Image):
                 tts = gTTS(story_text, lang='en')
                 temp_audio_path = "narration.mp3"
                 tts.save(temp_audio_path)
-
                 with open(temp_audio_path, "rb") as f:
                     audio_bytes = f.read()
                     st.audio(audio_bytes, format="audio/mp3")
-
                 os.remove(temp_audio_path)
             else:
                 st.warning("No narration was generated.")
@@ -165,7 +173,7 @@ if image:
             bad_gut_notes.append("Low protein affects satiety and muscle repair.")
 
         if bad_gut_notes:
-            st.markdown("### **Bad Gut Guys**")
+            st.markdown("### Bad Gut Guys")
             st.markdown("<div style='background-color:#ffcccc;padding:10px;border-radius:10px;color:black;'>"
                         + "<br>".join(bad_gut_notes) + "</div>", unsafe_allow_html=True)
 
@@ -174,7 +182,7 @@ st.markdown("---")
 st.subheader("What's Missing in Your Diet?")
 st.markdown("""
     <div style='background-color: #FFF5E6; padding: 20px; border-radius: 15px; box-shadow: 0px 0px 10px 2px #FFD700;'>
-        <p style='color: #FF5733; font-size: 18px; text-align: center;'><strong>Let's Talk About Your Diet!</strong></p>
+        <p style='color: #FF5733; font-size: 18px; text-align: center;'><strong>Let's Talk About Your Diet</strong></p>
         <p style='color: #333; font-size: 16px;'>While we focus on macro counts, don't forget the <strong>hidden dangers</strong> in your food:</p>
         <ul style='color: #333; font-size: 14px;'>
             <li><strong>Sugar:</strong> May lead to energy crashes, weight gain, insulin resistance.</li>
@@ -243,6 +251,6 @@ st.markdown("---")
 st.markdown("""
     <div style='text-align: center; font-family: "Courier New", Courier, monospace; color: #2E8B57; background-color: #F0FFF0; padding: 15px; border-radius: 15px; box-shadow: 0px 0px 10px 2px #ADFF2F;'>
         <p><strong>This app was lovingly created by Kiruthika</strong>, a self-proclaimed sugar addict who couldn't resist French Vanilla with extra sugar and two bonus sugar packs from Tims.</p>
-        <p>But guess what? <em>With the encouragement of my amazing Health Coach Bharani, I finally embraced a healthy lifestyle!</em></p>
+        <p>But guess what? <em>With the encouragement of my amazing Health Coach Bharani, I finally embraced a healthy lifestyle.</em></p>
     </div>
 """, unsafe_allow_html=True)
