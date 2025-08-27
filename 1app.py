@@ -263,6 +263,5 @@ if st.button("Reset for New Day"):
     st.success("Daily log cleared.")
 
 
-    </div>
-""", unsafe_allow_html=True)
+
 
