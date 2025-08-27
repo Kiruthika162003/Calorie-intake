@@ -262,10 +262,7 @@ if st.button("Reset for New Day"):
     st.session_state.last_image = None
     st.success("Daily log cleared.")
 
-st.markdown("---")
-st.markdown("""
-    <div style='text-align: center; font-family: "Courier New", Courier, monospace; color: #2E8B57; background-color: #F0FFF0; padding: 15px; border-radius: 15px; box-shadow: 0px 0px 10px 2px #ADFF2F;'>
-        <p><strong>This app was lovingly created by Kiruthika</strong>, a self-proclaimed sugar addict who couldn't resist French Vanilla with extra sugar and two bonus sugar packs from Tims.</p>
-        <p>But guess what? <em>With the encouragement of my amazing Health Coach Bharani, I finally embraced a healthy lifestyle.</em></p>
+
     </div>
 """, unsafe_allow_html=True)
+
